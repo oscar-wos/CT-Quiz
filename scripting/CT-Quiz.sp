@@ -17,7 +17,7 @@
 
 // Compiler Info: Pawn 1.8 - build 6041
 
-#define PLUGIN_VERSION "1.00"
+#define PLUGIN_VERSION "1.00.1"
 
 #include <sourcemod>
 
@@ -28,8 +28,7 @@ enum QUIZ {
 	QUIZ_INCORRECT_2,
 	QUIZ_INCORRECT_3,
 	QUIZ_INCORRECT_4,
-	QUIZ_INCORRECT_5,
-	QUIZ_INCORRECT_6,
+	QUIZ_INCORRECT_5
 }
 
 ArrayList g_aQuiz;
@@ -57,6 +56,8 @@ public Action Command_ReloadQuestions(int iClient, int iArgs) {
 }
 
 public Action Event_Team(Event eEvent, const char[] cName, bool bDontBroadcast) {
+	if (!g_bReady) return Plugin_Continue;
+
 	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
 	int iNewTeam = eEvent.GetInt("team");
 	int iOldTeam = eEvent.GetInt("oldteam");
@@ -79,29 +80,40 @@ void LoadQuestions() {
 	char cPath[512];
 	BuildPath(Path_SM, cPath, sizeof(cPath), "configs/ctquiz.cfg");
 
-	if (!FileExists(cPath)) SetFailState("[CT-Quiz] - Config File Not Found!");
+	if (!FileExists(cPath)) SetFailState("[CT-Quiz] - Config File (/configs/ctquiz.cfg) Not Found!");
 
 	KeyValues kvQuiz = new KeyValues("");
 	kvQuiz.ImportFromFile(cPath);
 
 	kvQuiz.JumpToKey("CTQuiz");
-	kvQuiz.GotoFirstSubKey();
+	kvQuiz.GotoFirstSubkey();
 
-	while (kvQuiz.GotoNextKey()) {
+	do {
 		ArrayList aTemp = new ArrayList(512);
 		char cSectionName[512];
 		char cTemp[512];
 
 		kvQuiz.GetSectionName(cSectionName, sizeof(cSectionName));
 
-		kvQuiz.GetString("question", cTemp, sizeof(cTemp), "");
+		kvQuiz.GetString("q", cTemp, sizeof(cTemp), "");
 		if (strlen(cTemp) < 2) FormatEx(cTemp, sizeof(cTemp), "No Question Defined (%s)", cSectionName);
 		aTemp.SetString(QUIZ_QUESTION, cTemp);
 
-		// ...
+		kvQuiz.GetString("c", cTemp, sizeof(cTemp), "");
+		if (strlen(cTemp) < 2) FormatEx(cTemp, sizeof(cTemp), "No Correct Answer Defined (%s)", cSectionName);
+		aTemp.SetString(QUIZ_CORRECT, cTemp);
 
-		// g_aQuiz.Push(aTemp);
-	}
+		for (let i = 0; i < 5; i++) {
+			// I think this works, needs testing.
+			kvQuiz.GetString(view_as<char>(i), cTemp, sizeof(cTemp), "");
+
+			if (strlen(cTemp) > 2) {
+				aTemp.SetString(QUIZ_INCORRECT_1 + i, cTemp);
+			}
+		}
+
+		g_aQuiz.Push(aTemp);
+	} while (kvQuiz.GotoNextKey())
 
 	g_bReady = true;
 	delete kvQuiz;
