@@ -21,6 +21,14 @@
 
 #include <sourcemod>
 
+enum CONFIG {
+	CONFIG_TYPE,
+	CONFIG_TYPE_AMOUNT,
+	CONFIG_MAX_LOOK,
+	CONFIG_MOVE_BEFORE,
+	CONFIG_FORCE_COMMAND
+}
+
 enum QUIZ {
 	QUIZ_QUESTION,
 	QUIZ_CORRECT,
@@ -32,6 +40,7 @@ enum QUIZ {
 }
 
 ArrayList g_aQuiz;
+ArrayList g_aConfig;
 bool g_bReady;
 
 public Plugin myinfo = {
@@ -44,15 +53,21 @@ public Plugin myinfo = {
 
 public void OnPluginStart() {
 	HookEvent("player_team", Event_Team, EventHookMode_Pre);
-	RegAdminCmd("sm_reloadquestions", Command_ReloadQuestions, ADMFLAG_ROOT, "Reloads the Questions for CT-Quiz");
+	RegAdminCmd("sm_ctqreloadquestions", Command_ReloadQuestions, ADMFLAG_ROOT, "Reloads the Questions for CT-Quiz");
+	RegAdminCmd("sm_ctqreloadconfig", Command_ReloadConfig, ADMFLAG_ROOT, "Reloads the Config for CT-Quiz");
 }
 
 public void OnMapStart() {
+	// LoadConfig();
 	// LoadQuestions();
 }
 
 public Action Command_ReloadQuestions(int iClient, int iArgs) {
 	// LoadQuestions();
+}
+
+public Action Command_ReloadConfig(int iClient, int iArgs) {
+	// LoadConfig();
 }
 
 public Action Event_Team(Event eEvent, const char[] cName, bool bDontBroadcast) {
@@ -63,6 +78,36 @@ public Action Event_Team(Event eEvent, const char[] cName, bool bDontBroadcast) 
 	int iOldTeam = eEvent.GetInt("oldteam");
 
 	// ...
+}
+
+void LoadConfig() {
+	g_bReady = false;
+
+	if (IsValidHandle(g_aConfig)) delete g_aConfig;
+	g_aConfig = new ArrayList(512);
+
+	char cPath[512];
+	BuildPath(Path_SM, cPath, sizeof(cPath), "configs/ctquiz-config.cfg");
+
+	if (!FileExists(cPath)) SetFailState("[CT-Quiz] - Config File (%s) Not Found!", cPath);
+
+	KeyValues kvConfig = new KeyValues("");
+	kvConfig.ImportFromFile(cPath);
+
+	kvConfig.JumpToKey("CTQuizConfig");
+	kvConfig.GotoFirstSubkey();
+
+	g_aConfig.Set(CONFIG_TYPE, kvConfig.GetInt("failedType"));
+	g_aConfig.Set(CONFIG_TYPE_AMOUNT, kvConfig.GetInt("failedTypeAmount"));
+	g_aConfig.Set(CONFIG_MAX_LOOK, kvConfig.GetInt("maxLook"));
+	g_aConfig.Set(CONFIG_MOVE_BEFORE, kvConfig.GetInt("failedType"));
+
+	char cForceCommand[512];
+	kvConfig.GetString("failedForceCommand", cForceCommand, sizeof(cForceCommand));
+	g_aConfig.SetString(CONFIG_FORCE_COMMAND, cForceCommand);
+
+	delete kvConfig;
+	g_bReady = true;
 }
 
 void LoadQuestions() {
@@ -78,14 +123,14 @@ void LoadQuestions() {
 	g_aQuiz = new ArrayList(512);
 
 	char cPath[512];
-	BuildPath(Path_SM, cPath, sizeof(cPath), "configs/ctquiz.cfg");
+	BuildPath(Path_SM, cPath, sizeof(cPath), "configs/ctquiz-questions.cfg");
 
-	if (!FileExists(cPath)) SetFailState("[CT-Quiz] - Config File (/configs/ctquiz.cfg) Not Found!");
+	if (!FileExists(cPath)) SetFailState("[CT-Quiz] - Config File (%s) Not Found!", cPath);
 
 	KeyValues kvQuiz = new KeyValues("");
 	kvQuiz.ImportFromFile(cPath);
 
-	kvQuiz.JumpToKey("CTQuiz");
+	kvQuiz.JumpToKey("CTQuizQuestions");
 	kvQuiz.GotoFirstSubkey();
 
 	do {
@@ -115,6 +160,6 @@ void LoadQuestions() {
 		g_aQuiz.Push(aTemp);
 	} while (kvQuiz.GotoNextKey())
 
-	g_bReady = true;
 	delete kvQuiz;
+	g_bReady = true;
 }

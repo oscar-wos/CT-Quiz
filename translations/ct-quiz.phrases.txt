@@ -1,0 +1,19 @@
+"Phrases"
+{
+	"Blocked Time"
+	{
+		"#format"	"{1:s}"
+		"en"		"You've been blocked from joining CT for {1} Second(s)"
+	}
+
+	"Blocked Round"
+	{
+		"#format"	"{1:s}"
+		"en"		"You've been blocked from joining CT for {1} Round(s)"
+	}
+
+	"Blocked Map"
+	{
+		"en"		"You've been blocked from joining CT for the rest of the Map"
+	}
+}
