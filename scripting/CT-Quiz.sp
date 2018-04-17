@@ -17,7 +17,10 @@
 
 // Compiler Info: Pawn 1.8 - build 6041
 
-#define PLUGIN_VERSION "1.00.1"
+#define PLUGIN_VERSION "1.00.2"
+#define PLUGIN_PREFIX "\x01[\x06CT-Quiz\x01]"
+
+#define TEAM_CT 3
 
 #include <sourcemod>
 
@@ -26,22 +29,20 @@ enum CONFIG {
 	CONFIG_TYPE_AMOUNT,
 	CONFIG_MAX_LOOK,
 	CONFIG_MOVE_BEFORE,
+	CONFIG_SHOW_ADMINS,
 	CONFIG_FORCE_COMMAND
 }
 
 enum QUIZ {
-	QUIZ_QUESTION,
-	QUIZ_CORRECT,
-	QUIZ_INCORRECT_1,
-	QUIZ_INCORRECT_2,
-	QUIZ_INCORRECT_3,
-	QUIZ_INCORRECT_4,
-	QUIZ_INCORRECT_5
+	QUIZ_QUESTION = 0,
+	QUIZ_CORRECT = 64,
+	QUIZ_INCORRECT = 128
 }
 
 ArrayList g_aQuiz;
 ArrayList g_aConfig;
 bool g_bReady;
+bool g_bEnabled;
 
 public Plugin myinfo = {
 	name = "CT-Quiz",
@@ -58,32 +59,51 @@ public void OnPluginStart() {
 }
 
 public void OnMapStart() {
-	// LoadConfig();
-	// LoadQuestions();
+	LoadConfig();
+	LoadQuestions();
 }
 
 public Action Command_ReloadQuestions(int iClient, int iArgs) {
-	// LoadQuestions();
+	LoadQuestions();
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command_ReloadQuestions")
+
+	return Plugin_Handled;
 }
 
 public Action Command_ReloadConfig(int iClient, int iArgs) {
-	// LoadConfig();
+	LoadConfig();
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command_ReloadConfig")
+
+	return Plugin_Handled;
+}
+
+public Action Command_EnableQuiz(int iClient, int iArgs) {
+	g_bEnabled = true;
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command_Enabled")
+
+	return Plugin_Handled;
 }
 
 public Action Event_Team(Event eEvent, const char[] cName, bool bDontBroadcast) {
 	if (!g_bReady) return Plugin_Continue;
 
 	int iClient = GetClientOfUserId(eEvent.GetInt("userid"));
+	if (IsFakeClient(iClient)) return Plugin_Continue;
+
 	int iNewTeam = eEvent.GetInt("team");
 	int iOldTeam = eEvent.GetInt("oldteam");
 
-	// ...
+	if (iNewTeam == TEAM_CT && iOldTeam != TEAM_CT && g_bEnabled) {
+		ShowQuiz(iClient)
+	}
+
+	return Plugin_Continue;
 }
 
 void LoadConfig() {
 	g_bReady = false;
 
-	if (IsValidHandle(g_aConfig)) delete g_aConfig;
+	if (g_aConfig != INVALID_HANDLE) delete g_aConfig;
 	g_aConfig = new ArrayList(512);
 
 	char cPath[512];
@@ -95,16 +115,17 @@ void LoadConfig() {
 	kvConfig.ImportFromFile(cPath);
 
 	kvConfig.JumpToKey("CTQuizConfig");
-	kvConfig.GotoFirstSubkey();
+	kvConfig.GotoFirstSubKey();
 
-	g_aConfig.Set(CONFIG_TYPE, kvConfig.GetInt("failedType"));
-	g_aConfig.Set(CONFIG_TYPE_AMOUNT, kvConfig.GetInt("failedTypeAmount"));
-	g_aConfig.Set(CONFIG_MAX_LOOK, kvConfig.GetInt("maxLook"));
-	g_aConfig.Set(CONFIG_MOVE_BEFORE, kvConfig.GetInt("failedType"));
+	g_aConfig.Set(view_as<int>(CONFIG_TYPE), kvConfig.GetNum("failedType"));
+	g_aConfig.Set(view_as<int>(CONFIG_TYPE_AMOUNT), kvConfig.GetNum("failedTypeAmount"));
+	g_aConfig.Set(view_as<int>(CONFIG_MAX_LOOK), kvConfig.GetNum("maxLook"));
+	g_aConfig.Set(view_as<int>(CONFIG_MOVE_BEFORE), kvConfig.GetNum("moveBeforeQuiz"));
+	g_aConfig.Set(view_as<int>(CONFIG_SHOW_ADMINS), kvConfig.GetNum("showFailed"));
 
 	char cForceCommand[512];
 	kvConfig.GetString("failedForceCommand", cForceCommand, sizeof(cForceCommand));
-	g_aConfig.SetString(CONFIG_FORCE_COMMAND, cForceCommand);
+	g_aConfig.SetString(view_as<int>(CONFIG_FORCE_COMMAND), cForceCommand);
 
 	delete kvConfig;
 	g_bReady = true;
@@ -113,8 +134,8 @@ void LoadConfig() {
 void LoadQuestions() {
 	g_bReady = false;
 
-	if (IsValidHandle(g_aQuiz)) {
-		for (let i = 0; i < g_aQuiz.Length; i++) {
+	if (g_aQuiz != INVALID_HANDLE) {
+		for (int i = 0; i < g_aQuiz.Length; i++) {
 			ArrayList aTemp = g_aQuiz.Get(i);
 			delete aTemp;
 		}
@@ -131,7 +152,7 @@ void LoadQuestions() {
 	kvQuiz.ImportFromFile(cPath);
 
 	kvQuiz.JumpToKey("CTQuizQuestions");
-	kvQuiz.GotoFirstSubkey();
+	kvQuiz.GotoFirstSubKey();
 
 	do {
 		ArrayList aTemp = new ArrayList(512);
@@ -142,19 +163,20 @@ void LoadQuestions() {
 
 		kvQuiz.GetString("q", cTemp, sizeof(cTemp), "");
 		if (strlen(cTemp) < 2) FormatEx(cTemp, sizeof(cTemp), "No Question Defined (%s)", cSectionName);
-		aTemp.SetString(QUIZ_QUESTION, cTemp);
+		aTemp.SetString(view_as<int>(QUIZ_QUESTION), cTemp);
 
 		kvQuiz.GetString("c", cTemp, sizeof(cTemp), "");
 		if (strlen(cTemp) < 2) FormatEx(cTemp, sizeof(cTemp), "No Correct Answer Defined (%s)", cSectionName);
-		aTemp.SetString(QUIZ_CORRECT, cTemp);
+		aTemp.SetString(view_as<int>(QUIZ_CORRECT), cTemp);
 
-		for (let i = 0; i < 5; i++) {
-			// I think this works, needs testing.
-			kvQuiz.GetString(view_as<char>(i), cTemp, sizeof(cTemp), "");
+		for (int i = 0; i < 5; i++) {
+			// So view_as<char>(i) doesn't work...
+			char sI[4];
+			FormatEx(sI, sizeof(sI), "%i", i);
+			kvQuiz.GetString(sI, cTemp, sizeof(cTemp), "");
 
-			if (strlen(cTemp) > 2) {
-				aTemp.SetString(QUIZ_INCORRECT_1 + i, cTemp);
-			}
+			if (strlen(cTemp) < 2) break;
+			aTemp.SetString((view_as<int>(QUIZ_INCORRECT) + (i * 64)), cTemp);
 		}
 
 		g_aQuiz.Push(aTemp);
@@ -162,4 +184,31 @@ void LoadQuestions() {
 
 	delete kvQuiz;
 	g_bReady = true;
+}
+
+void ShowQuiz(int iClient) {
+	Menu mQuiz = new Menu(Menu_Quiz);
+	mQuiz.ExitButton = false;
+
+	// Shuffling and Randoming of Questions / Answers per Execution
+
+	if (!mQuiz.Display(iClient, 0)) {
+
+	}
+}
+
+public int Menu_Quiz(Menu mMenu, MenuAction maAction, int iParam1, int iParam2) {
+	switch (MenuAction) {
+		case MenuAction_Select: {
+
+		}
+
+		case MenuAction_Cancel: {
+
+		}
+
+		case MenuAction_End: {
+
+		}
+	}
 }
