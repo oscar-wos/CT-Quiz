@@ -17,18 +17,57 @@
 		"en"		"You've been blocked from joining CT for the rest of the Map"
 	}
 
-	"Command_ReloadQuestions"
+	"Admin Notification Fail"
+	{
+		"#format"	"{1:s}"
+		"en"		"Player {1} tried to join CT-Quiz and failed the quiz"
+	}
+
+	"Admin Notification Cancel"
+	{
+		"#format"	"{1:s}"
+		"en"		"Player {1} tried to join CT-Quiz and canceled the quiz"
+	}
+
+	"Admin Notification End"
+	{
+		"#format"	"{1:s}"
+		"en"		"Player {1} tried to join CT-Quiz and ended the quiz"
+	}
+
+	"Quiz Title"
+	{
+		"#format"	"{1:i}"
+		"en"		"CT-Quiz! Please correctly choose your answer within {1} second(s)"
+	}
+
+	"Quiz Item Ran Out Of Time"
+	{
+		"en"		"You've ran out of time!"
+	}
+
+	"Quiz Timer Error"
+	{
+		"en"		"There was an error with the quiz! Try again."
+	}
+
+	"Command Reload Questions"
 	{
 		"en"		"Questions Reloaded"
 	}
 
-	"Command_ReloadConfig"
+	"Command Reload Config"
 	{
 		"en"		"Config Reloaded"
 	}
 
-	"Command_Enabled"
+	"Command Enabled"
 	{
 		"en"		"CT-Quiz Enabled"
+	}
+
+	"Command Disabled"
+	{
+		"en"		"CT-Quiz Disabled"
 	}
 }

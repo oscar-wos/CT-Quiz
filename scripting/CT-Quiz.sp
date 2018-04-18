@@ -17,12 +17,15 @@
 
 // Compiler Info: Pawn 1.8 - build 6041
 
-#define PLUGIN_VERSION "1.00.2"
+#define PLUGIN_VERSION "1.00.4"
 #define PLUGIN_PREFIX "\x01[\x06CT-Quiz\x01]"
 
+#define TEAM_T 2
 #define TEAM_CT 3
 
 #include <sourcemod>
+#include <sdktools>
+#include <cstrike>
 
 enum CONFIG {
 	CONFIG_TYPE,
@@ -44,6 +47,9 @@ ArrayList g_aConfig;
 bool g_bReady;
 bool g_bEnabled;
 
+Handle g_hTimers[MAXPLAYERS + 1];
+float g_fTimers[MAXPLAYERS + 1];
+
 public Plugin myinfo = {
 	name = "CT-Quiz",
 	author = "Oscar Wos (OSWO)",
@@ -53,6 +59,8 @@ public Plugin myinfo = {
 }
 
 public void OnPluginStart() {
+	LoadTranslations("ct-quiz.phrases");
+
 	HookEvent("player_team", Event_Team, EventHookMode_Pre);
 	RegAdminCmd("sm_ctqreloadquestions", Command_ReloadQuestions, ADMFLAG_ROOT, "Reloads the Questions for CT-Quiz");
 	RegAdminCmd("sm_ctqreloadconfig", Command_ReloadConfig, ADMFLAG_ROOT, "Reloads the Config for CT-Quiz");
@@ -65,23 +73,28 @@ public void OnMapStart() {
 
 public Action Command_ReloadQuestions(int iClient, int iArgs) {
 	LoadQuestions();
-	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command_ReloadQuestions")
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command Reload Questions")
 
 	return Plugin_Handled;
 }
 
 public Action Command_ReloadConfig(int iClient, int iArgs) {
 	LoadConfig();
-	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command_ReloadConfig")
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command Reload Config")
 
 	return Plugin_Handled;
 }
 
 public Action Command_EnableQuiz(int iClient, int iArgs) {
 	g_bEnabled = true;
-	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command_Enabled")
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command Enabled")
 
 	return Plugin_Handled;
+}
+
+public Action Command_DisableQuiz(int iClient, int iArgs) {
+	g_bEnabled = false;
+	ReplyToCommand(iClient, "%s %T", PLUGIN_PREFIX, "Command Disabled");
 }
 
 public Action Event_Team(Event eEvent, const char[] cName, bool bDontBroadcast) {
@@ -94,7 +107,8 @@ public Action Event_Team(Event eEvent, const char[] cName, bool bDontBroadcast) 
 	int iOldTeam = eEvent.GetInt("oldteam");
 
 	if (iNewTeam == TEAM_CT && iOldTeam != TEAM_CT && g_bEnabled) {
-		ShowQuiz(iClient)
+		g_fTimers[iClient] = GetGameTime();
+		g_hTimers[iClient] = CreateTimer(1.0, Timer_Quiz, GetClientUserId(iClient), TIMER_REPEAT);
 	}
 
 	return Plugin_Continue;
@@ -186,29 +200,102 @@ void LoadQuestions() {
 	g_bReady = true;
 }
 
+public Action Timer_Quiz(Handle hTimer, int iUserId) {
+	int iClient = GetClientOfUserId(iUserId);
+
+	if (!IsValidClient(iClient)) {
+		return Plugin_Stop;
+	}
+
+	ShowQuiz(iClient);
+	return Plugin_Continue;
+}
+
 void ShowQuiz(int iClient) {
 	Menu mQuiz = new Menu(Menu_Quiz);
 	mQuiz.ExitButton = false;
 
-	// Shuffling and Randoming of Questions / Answers per Execution
+	int iTimeRemaining = g_aConfig.Get(view_as<int>(CONFIG_MAX_LOOK)) - RoundToFloor((GetGameTime() - g_fTimers[iClient]) / (1000 * 60));
+	mQuiz.SetTitle("%T", "Quiz Title", iTimeRemaining);
+
+	char cTemp[128];
+
+	if (iTimeRemaining >= 0) {
+		FormatEx(cTemp, sizeof(cTemp), "%T", "Quiz Item Ran Out Of Time");
+		mQuiz.AddItem("", cTemp, ITEMDRAW_DISABLED);
+	} else {
+		// Shuffling and Randoming of Questions / Answers per Execution
+	}
 
 	if (!mQuiz.Display(iClient, 0)) {
-
+		TryKillQuizTimer(iClient);
 	}
 }
 
 public int Menu_Quiz(Menu mMenu, MenuAction maAction, int iParam1, int iParam2) {
+	if (!IsValidClient(iParam1)) return;
+
+	char cName[MAX_NAME_LENGTH];
+	GetClientName(iParam1, cName, sizeof(cName));
+
+	ArrayList aAdmins = new ArrayList();
+	FindSuitableAdmins(aAdmins, ADMFLAG_GENERIC);
+
 	switch (MenuAction) {
 		case MenuAction_Select: {
-
+			/*
+			if (view_as<bool>(g_aConfig.Get(view_as<int>(CONFIG_SHOW_ADMINS)))) {
+				for (int i = 0; i < aAdmins.Length; i++) {
+					PrintToConsole(i, "[CT-Quiz] %T", "Admin Notification Fail", cName);
+				}
+			}
+			*/
 		}
 
 		case MenuAction_Cancel: {
-
+			if (view_as<bool>(g_aConfig.Get(view_as<int>(CONFIG_SHOW_ADMINS)))) {
+				for (int i = 0; i < aAdmins.Length; i++) {
+					PrintToConsole(i, "[CT-Quiz] %T", "Admin Notification Cancel", cName);
+				}
+			}
 		}
 
 		case MenuAction_End: {
-
+			if (view_as<bool>(g_aConfig.Get(view_as<int>(CONFIG_SHOW_ADMINS)))) {
+				for (int i = 0; i < aAdmins.Length; i++) {
+					PrintToConsole(i, "[CT-Quiz] %T", "Admin Notification End", cName);
+				}
+			}
 		}
 	}
+}
+
+void FindSuitableAdmins(ArrayList aAdmins, int iFlag) {
+	for (int i = 0; i <= MaxClients; i++) {
+		if (IsValidClient(i)) {
+			if (CheckCommandAccess(i, "", iFlag, true)) {
+				aAdmins.Push(i);
+			}
+		}
+	}
+}
+
+void TryKillQuizTimer(int iIndex) {
+	if (g_hTimers[iIndex] != INVALID_HANDLE) {
+		KillTimer(g_hTimers[iIndex]);
+		g_hTimers[iIndex] = INVALID_HANDLE;
+	}
+
+	if (IsValidClient(iIndex) && GetClientTeam(iIndex) == TEAM_CT) {
+		PrintToChat(iIndex, "%s %T", PLUGIN_PREFIX, "Quiz Timer Error");
+
+		SlapPlayer(iIndex, 99999, false);
+		CS_SwitchTeam(iIndex, TEAM_T)
+	}
+}
+
+bool IsValidClient(int iIndex) {
+	if (!IsFakeClient(iIndex) && IsClientConnected(iIndex) && iIndex > 0 && iIndex < MaxClients) return true;
+
+	return false;
 }
