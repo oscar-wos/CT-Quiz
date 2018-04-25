@@ -212,15 +212,23 @@ public Action Timer_Quiz(Handle hTimer, int iUserId) {
 }
 
 void ShowQuiz(int iClient) {
+	if (GetClientTeam(iClient) != TEAM_CT) {
+		TryKillQuizTimer(iClient);
+	}
+
 	Menu mQuiz = new Menu(Menu_Quiz);
 	mQuiz.ExitButton = false;
 
 	int iTimeRemaining = g_aConfig.Get(view_as<int>(CONFIG_MAX_LOOK)) - RoundToFloor((GetGameTime() - g_fTimers[iClient]) / (1000 * 60));
 	mQuiz.SetTitle("%T", "Quiz Title", iTimeRemaining);
 
+	if (iTimeRemaining < 0) {
+		TryKillQuizTimer(iClient);
+	}
+
 	char cTemp[128];
 
-	if (iTimeRemaining >= 0) {
+	if (iTimeRemaining == 0) {
 		FormatEx(cTemp, sizeof(cTemp), "%T", "Quiz Item Ran Out Of Time");
 		mQuiz.AddItem("", cTemp, ITEMDRAW_DISABLED);
 	} else {
@@ -289,13 +297,13 @@ void TryKillQuizTimer(int iIndex) {
 	if (IsValidClient(iIndex) && GetClientTeam(iIndex) == TEAM_CT) {
 		PrintToChat(iIndex, "%s %T", PLUGIN_PREFIX, "Quiz Timer Error");
 
-		SlapPlayer(iIndex, 99999, false);
+		// SlapPlayer(iIndex, 99999, false);
 		CS_SwitchTeam(iIndex, TEAM_T)
 	}
 }
 
 bool IsValidClient(int iIndex) {
-	if (!IsFakeClient(iIndex) && IsClientConnected(iIndex) && iIndex > 0 && iIndex < MaxClients) return true;
+	if (!IsFakeClient(iIndex) && IsClientConnected(iIndex) && iIndex > 0 && iIndex <= MaxClients) return true;
 
 	return false;
 }
